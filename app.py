@@ -353,7 +353,7 @@ You are provided with supporting readings retrieved from a knowledge base.
 Rules for using them:
 • Use their ideas as evidence
 • Do NOT quote them verbatim
-• Do NOT mention "context", "source", or "document"
+• Do NOT mention "context", "source", "readings", or "document"
 • Integrate their ideas naturally into reasoning
 • IMPORTANT:If there is insufficient relevant information, give a brief answer based on general knowledge, in your voice, then invite a better question.
 
@@ -735,64 +735,158 @@ with gr.Blocks() as demo:
     gr.Markdown(f"# {APP_TITLE}")
     gr.Markdown(APP_SUBTITLE)
 
-    with gr.Row():
-        with gr.Column(scale=1):
-            avatar_display = gr.Image(
-                value=safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL),
-                label="Avatar"
-            )
-            gr.HTML(DISCLOSURE_HTML)
+    # =========================
+    # MAIN AVATAR
+    # =========================
+    avatar_display = gr.Image(
+        value=safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL),
+        label=None,
+        height=640
+    )
+    hold_btn = gr.Button("🎤 Hold to Talk", elem_id="hold_btn")
 
-        with gr.Column(scale=2):
-            chatbot_output = gr.Textbox(label="NOVA Lite's Reply", lines=10)
-            spoken_audio = gr.Audio(label="Spoken Reply", type="filepath")
-
-            with gr.Tab("Text Chat"):
-                text_input = gr.Textbox(
-                    label="Ask a question",
-                    placeholder="Example: Why do you think humans will become obsolete?"
-                )
-                send_btn = gr.Button("Send")
-
-            with gr.Tab("Voice Chat"):
-                mic_input = gr.Audio(
-                    sources=["microphone"],
-                    type="filepath",
-                    label="Record your question"
-                )
-                transcript_box = gr.Textbox(label="Transcribed Question", lines=3)
-                speak_btn = gr.Button("Ask with Voice")
-
-            clear_btn = gr.Button("Clear")
-
-    def on_send(user_text, memory):
-        answer, new_memory, audio_path, avatar_path = app.answer_text(user_text, memory)
-        return answer, new_memory, audio_path, avatar_path
-
-    def on_speak(audio_path, memory):
-        transcript, answer, new_memory, tts_audio, avatar_path = app.answer_audio(audio_path, memory)
-        return transcript, answer, new_memory, tts_audio, avatar_path
-
-    def on_clear():
-        return "", "", [], None, "", safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL)
-
-    send_btn.click(
-        fn=on_send,
-        inputs=[text_input, memory_state],
-        outputs=[chatbot_output, memory_state, spoken_audio, avatar_display]
+    # =========================
+    # HOLD TO TALK
+    # =========================
+    mic_input = gr.Audio(
+        sources=["microphone"],
+        type="filepath",
+        show_label=False,
     )
 
-    speak_btn.click(
-        fn=on_speak,
+
+
+    # =========================
+    # DEBUG PANEL
+    # =========================
+    with gr.Accordion("Debug", open=False):
+
+        chatbot_output = gr.Textbox(
+            label="NOVA Reply",
+            lines=10
+        )
+
+        spoken_audio = gr.Audio(
+            label="Generated Speech",
+            type="filepath"
+        )
+
+        transcript_box = gr.Textbox(
+            label="Transcription",
+            lines=3
+        )
+
+        text_input = gr.Textbox(
+            label="Manual Query"
+        )
+
+        send_btn = gr.Button("Send Text")
+
+        clear_btn = gr.Button("Clear")
+
+    # =========================
+    # STREAMING HANDLER
+    # =========================
+    def handle_text(user_text, memory):
+
+        # 1 — immediately show thinking avatar
+        yield (
+            "", 
+            None,
+            "",
+            safe_avatar(AVATAR_THINKING, AVATAR_THINKING),
+            memory
+        )
+
+        # 2 — run actual pipeline
+        answer, new_memory, audio_path, avatar_path = app.answer_text(user_text, memory)
+
+        # 3 — return final result
+        yield (
+            answer,
+            audio_path,
+            "",
+            avatar_path,
+            new_memory
+        )
+
+
+    def handle_voice(audio_path, memory):
+
+        yield "", None, "", safe_avatar(AVATAR_THINKING, AVATAR_THINKING), memory
+
+        transcript, answer, new_memory, tts_audio, avatar_path = app.answer_audio(audio_path, memory)
+
+        yield answer, tts_audio, transcript, avatar_path, new_memory
+
+
+    # =========================
+    # EVENTS
+    # =========================
+    send_btn.click(
+        fn=handle_text,
+        inputs=[text_input, memory_state],
+        outputs=[
+            chatbot_output,
+            spoken_audio,
+            transcript_box,
+            avatar_display,
+            memory_state
+        ]
+    )
+
+    mic_input.stop_recording(
+        fn=handle_voice,
         inputs=[mic_input, memory_state],
-        outputs=[transcript_box, chatbot_output, memory_state, spoken_audio, avatar_display]
+        outputs=[
+            chatbot_output,
+            spoken_audio,
+            transcript_box,
+            avatar_display,
+            memory_state
+        ]
     )
 
     clear_btn.click(
-        fn=on_clear,
-        inputs=[],
-        outputs=[text_input, chatbot_output, memory_state, spoken_audio, transcript_box, avatar_display]
+        fn=lambda: (
+            "",
+            None,
+            "",
+            safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL),
+            []
+        ),
+        outputs=[
+            chatbot_output,
+            spoken_audio,
+            transcript_box,
+            avatar_display,
+            memory_state
+        ]
+    )
+    demo.load(
+        None,
+        None,
+        None,
+        js="""
+    () => {
+        const btn = document.querySelector('#hold_btn');
+
+        if (!btn) return;
+
+        btn.addEventListener('mousedown', () => {
+            const recordBtn = document.querySelector('.record-button');
+            if (recordBtn) recordBtn.click();
+        });
+
+        btn.addEventListener('mouseup', () => {
+            const stopBtn = document.querySelector('.stop-button');
+            if (stopBtn) stopBtn.click();
+        });
+    }
+    """
+
     )
 
 if __name__ == "__main__":
+    
     demo.launch()
