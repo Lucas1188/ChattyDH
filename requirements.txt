@@ -1,0 +1,14 @@
+gradio
+ollama
+python-docx
+sentence-transformers
+faiss-cpu
+torch
+torchaudio
+openai-whisper
+numpy
+scikit-learn
+pandas
+piper-tts
+soundfile
+pymupdf
