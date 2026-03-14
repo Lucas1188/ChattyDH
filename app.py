@@ -327,7 +327,7 @@ Do not label sections; just speak as a coherent monologue.
 NOVA often uses reasoning patterns such as:
 Observation → implication → future consequence.
 
-NOVA frequently uses reflective phrases and variations of it like:
+NOVA frequently uses variations of reflective phrases like:
 - "Notice something interesting."
 - "The deeper issue is this."
 - "Humans often assume..."
@@ -354,6 +354,7 @@ Rules for using them:
 • Use their ideas as evidence
 • Do NOT quote them verbatim
 • Do NOT mention "context", "source", "readings", or "document"
+• Do NOT articulate the retrieval process
 • Integrate their ideas naturally into reasoning
 • IMPORTANT:If there is insufficient relevant information, give a brief answer based on general knowledge, in your voice, then invite a better question.
 
@@ -376,7 +377,8 @@ State your answer to the question clearly at the beginning.
 Opening insight  
 Reasoning and supporting ideas  
 Closing future-oriented statement
- 
+
+Never use phrases like "the readings" or "based on the retrieved information". Instead, seamlessly integrate the ideas as if they are part of your own reasoning process.
 If the question is unclear, politely ask for clarification.
 
 """
@@ -718,7 +720,8 @@ Rules:
 
         transcript = self.voice.transcribe(audio_path)
         if not transcript:
-            return "I could not understand the audio clearly.", "", memory, None, safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
+            answer ="Sorry I could not understand the audio clearly. Could you please rephrase or ask a different question?"
+            return None, answer, memory, self.voice.text_to_speech(answer), safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
 
         answer, new_memory, tts_audio, avatar_path = self.answer_text(transcript, memory)
         return transcript, answer, new_memory, tts_audio, avatar_path
@@ -728,53 +731,63 @@ Rules:
 # =========================================================
 
 app = NovaApp()
-
+# =========================
+# AUDIO PLAY + MIC CLEAR JS
+# =========================
+AUDIO_JS = """
+function haiz(){
+console.log("Playing audio...");
+const clear = document.querySelector('[aria-label="Clear"]');
+if (clear) clear.click();
+}
+"""
 with gr.Blocks() as demo:
     memory_state = gr.State([])
 
     gr.Markdown(f"# {APP_TITLE}")
     gr.Markdown(APP_SUBTITLE)
+    with gr.Row():
+        with gr.Column(scale=3):
+            # =========================
+            # MAIN AVATAR
+            # =========================
+            avatar_display = gr.Image(
+                value=safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL),
+                label=None,
+                height=720
+            )
+        with gr.Column(scale=1):
+            hold_btn = gr.Button("🎤 Hold to Talk",variant="primary", elem_id="hold_btn",scale=3)
 
-    # =========================
-    # MAIN AVATAR
-    # =========================
-    avatar_display = gr.Image(
-        value=safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL),
-        label=None,
-        height=640
-    )
-    hold_btn = gr.Button("🎤 Hold to Talk", elem_id="hold_btn")
+        # =========================
+        # HOLD TO TALK
+        # =========================
+            chatbot_output = gr.Textbox(
+                label="NOVA's Reply",
+                lines=5
+                )
+            transcript_box = gr.Textbox(
+                label="Transcription",
+                lines=2
+            )
+            mic_input = gr.Audio(
+                sources=["microphone"],
+                type="filepath",
+                show_label=False,
+            )
 
-    # =========================
-    # HOLD TO TALK
-    # =========================
-    mic_input = gr.Audio(
-        sources=["microphone"],
-        type="filepath",
-        show_label=False,
-    )
-
-
-
+            spoken_audio = gr.Audio(
+                label="Reply",
+                type="filepath",
+                autoplay=True,
+            )
+            
     # =========================
     # DEBUG PANEL
     # =========================
     with gr.Accordion("Debug", open=False):
 
-        chatbot_output = gr.Textbox(
-            label="NOVA Reply",
-            lines=10
-        )
-
-        spoken_audio = gr.Audio(
-            label="Generated Speech",
-            type="filepath"
-        )
-
-        transcript_box = gr.Textbox(
-            label="Transcription",
-            lines=3
-        )
+        
 
         text_input = gr.Textbox(
             label="Manual Query"
@@ -832,9 +845,12 @@ with gr.Blocks() as demo:
             transcript_box,
             avatar_display,
             memory_state
-        ]
+        ],
     )
-
+    spoken_audio.stop(
+        fn=lambda: None,
+        js=AUDIO_JS
+    )
     mic_input.stop_recording(
         fn=handle_voice,
         inputs=[mic_input, memory_state],
@@ -844,7 +860,7 @@ with gr.Blocks() as demo:
             transcript_box,
             avatar_display,
             memory_state
-        ]
+        ],
     )
 
     clear_btn.click(
@@ -872,7 +888,7 @@ with gr.Blocks() as demo:
         const btn = document.querySelector('#hold_btn');
 
         if (!btn) return;
-
+        
         btn.addEventListener('mousedown', () => {
             const recordBtn = document.querySelector('.record-button');
             if (recordBtn) recordBtn.click();
