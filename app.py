@@ -670,12 +670,11 @@ Rules:
                 return True
         return False
 
-    def answer_text(self, user_text: str, memory: List[Dict]) -> Tuple[str, List[Dict], Optional[str], Optional[str]]:
+    def answer_text(self, user_text: str, memory: List[Dict]) -> Tuple[str, List[Dict], Optional[str]]:
         user_text = (user_text or "").strip()
         if not user_text:
-            return "Please type a question.", memory, None, safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
+            return "Please type a question.", memory, safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
 
-        
         # Retrieval
         hits = self.retriever.search(user_text, k=TOP_K)
 
@@ -691,7 +690,7 @@ Rules:
         refusal = self.ollama_validate(user_text, hits, memory)
         print("Validated Answer")
         if refusal:
-            return refusal, memory, self.voice.text_to_speech(refusal), safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
+            return refusal, memory, safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
 
         # if not hits:
         #     return "The readings do not contain relevant information for this question.", memory, None, safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
@@ -707,24 +706,21 @@ Rules:
         answer = ollama_generate(user_text, hits, memory)
 
         new_memory = memory + [{"user": user_text, "assistant": answer}]
-        print("Generating Speech")
-
-        audio_path = self.voice.text_to_speech(answer)
         avatar_path = choose_avatar(user_text, answer)
 
-        return answer, new_memory, audio_path, avatar_path
+        return answer, new_memory, avatar_path
 
-    def answer_audio(self, audio_path: str, memory: List[Dict]) -> Tuple[str, str, List[Dict], Optional[str], Optional[str]]:
+    def answer_audio(self, audio_path: str, memory: List[Dict]) -> Tuple[str, str, List[Dict], Optional[str]]:
         if not audio_path:
-            return "No audio received.", "", memory, None, safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
+            return "No audio received.", "", memory, safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
 
         transcript = self.voice.transcribe(audio_path)
         if not transcript:
-            answer ="Sorry I could not understand the audio clearly. Could you please rephrase or ask a different question?"
-            return None, answer, memory, self.voice.text_to_speech(answer), safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
+            answer = "Sorry I could not understand the audio clearly. Could you please rephrase or ask a different question?"
+            return None, answer, memory, safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
 
-        answer, new_memory, tts_audio, avatar_path = self.answer_text(transcript, memory)
-        return transcript, answer, new_memory, tts_audio, avatar_path
+        answer, new_memory, avatar_path = self.answer_text(transcript, memory)
+        return transcript, answer, new_memory, avatar_path
 
 # =========================================================
 # 8) UI
@@ -800,7 +796,24 @@ with gr.Blocks() as demo:
     # =========================
     # STREAMING HANDLER
     # =========================
-    def handle_text(user_text, memory):
+    def _split_sentences(text: str) -> List[str]:
+        """Split text into sentences while preserving punctuation."""
+        if not text:
+            return []
+        # Preserve punctuation markers and split on sentence boundaries.
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        return [s.strip() for s in sentences if s.strip()]
+
+    def _avatar_for_sentence(idx: int) -> Optional[str]:
+        avatars = [
+            safe_avatar(AVATAR_HAPPY, AVATAR_NEUTRAL),
+            safe_avatar(AVATAR_THINKING, AVATAR_NEUTRAL),
+            safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL),
+            safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL),
+        ]
+        return avatars[idx % len(avatars)]
+
+    def handle_text(self, user_text, memory):
 
         # 1 — immediately show thinking avatar
         yield (
@@ -812,25 +825,50 @@ with gr.Blocks() as demo:
         )
 
         # 2 — run actual pipeline
-        answer, new_memory, audio_path, avatar_path = app.answer_text(user_text, memory)
+        answer, new_memory, base_avatar = app.answer_text(user_text, memory)
 
-        # 3 — return final result
-        yield (
-            answer,
-            audio_path,
-            "",
-            avatar_path,
-            new_memory
-        )
+        # 3 — stream by sentence (text + audio + avatar)
+        accumulated = ""
+        sentences = _split_sentences(answer)
+        if not sentences:
+            sentences = [answer]
 
+        for i, sentence in enumerate(sentences):
+            if not sentence:
+                continue
 
-    def handle_voice(audio_path, memory):
+            accumulated = (accumulated + " " + sentence).strip()
+            audio_file = app.voice.text_to_speech(sentence)
+            avatar_path = _avatar_for_sentence(i) or base_avatar
+
+            yield (
+                accumulated,
+                audio_file,
+                "",
+                avatar_path,
+                new_memory
+            )
+
+    def handle_voice(self, audio_path, memory):
 
         yield "", None, "", safe_avatar(AVATAR_THINKING, AVATAR_THINKING), memory
 
-        transcript, answer, new_memory, tts_audio, avatar_path = app.answer_audio(audio_path, memory)
+        transcript, answer, new_memory, base_avatar = app.answer_audio(audio_path, memory)
 
-        yield answer, tts_audio, transcript, avatar_path, new_memory
+        accumulated = ""
+        sentences = _split_sentences(answer)
+        if not sentences:
+            sentences = [answer]
+
+        for i, sentence in enumerate(sentences):
+            if not sentence:
+                continue
+
+            accumulated = (accumulated + " " + sentence).strip()
+            audio_file = app.voice.text_to_speech(sentence)
+            avatar_path = _avatar_for_sentence(i) or base_avatar
+
+            yield accumulated, audio_file, transcript, avatar_path, new_memory
 
 
     # =========================
