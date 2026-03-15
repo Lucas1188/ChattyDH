@@ -511,20 +511,23 @@ def ollama_generate(question: str, hits: List[Dict], memory: List[Dict], elabora
 
     # Build the evidence context
     context_block = ""
+    elaborate = "- Answer concisely (40–80 words) in your voice."  # default instruction
     if elaborate and hits:
         blocks = [f"- {clean_snippet(h['text'], 300)}" for h in hits]
         context_block = "Supporting evidence:\n" + "\n".join(blocks)
+        elaborate = "- Provide a detailed explanation using the provided evidence to support your claims."
 
     user_prompt = f"""
 User question:
+
 {question}
 
 {context_block}
 
+
 Instructions:
 
-- Answer concisely by default (40–80 words).
-- Only elaborate if explicitly requested.
+{elaborate}
 - Speak as a radical post-humanist debater.
 - Make bold, confident claims supported by evidence.
 - Never hedge or fabricate evidence.
