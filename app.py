@@ -56,11 +56,14 @@ AV_VIDEOS = {
     "amuse": ASSETS_DIR /"av_amuse.mp4",
     "heated": ASSETS_DIR /"av_heated.mp4",
     "talking": ASSETS_DIR /"av_talking.mp4",
-    "waiting": ASSETS_DIR /"av_waiting.mp4",
+    "waiting": [ASSETS_DIR /"av_waiting.mp4",ASSETS_DIR /"av_waiting1.mp4",ASSETS_DIR /"av_waiting2.mp4"],
 }
 
 def select_avatar_video(tone: str) -> str:
-    return AV_VIDEOS.get(tone, AV_VIDEOS["waiting"])
+    if(tone == "waiting"):
+        # Rotate through waiting videos for more variation
+        return AV_VIDEOS["waiting"][uuid.uuid4().int % len(AV_VIDEOS["waiting"])]
+    return AV_VIDEOS.get(tone, AV_VIDEOS["waiting"][0])
 
 EMBED_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 WHISPER_SIZE = "medium"
