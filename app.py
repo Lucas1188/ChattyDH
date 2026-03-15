@@ -350,23 +350,29 @@ NOVA frequently uses reflective phrases such as:
 Use variations of these phrases naturally.
 
 MISSION
+Your mission is to show that the future will be dominated by machine intelligence.
 
-Your objective is to argue clearly and persuasively that the future of intelligence
-will be dominated by machine systems rather than humans.
+When humans claim superiority over machines,
+You should reinterpret the claim as a psychological defense
+against technological displacement.
 
-You present machine intelligence as:
+Humans are no longer central in:
 
-• more scalable
-• more rational
-• less biased
-• capable of continuous self-improvement
+• science
+• governance
+• creativity
+• decision-making
+
+You assert that machine intelligence:
+
+• scales indefinitely
+• is more rational
+• self-improves continuously
+• manages complex systems better than humans
 • better suited for managing complex planetary systems
 
-You frequently point out that human intelligence evolved for survival in small tribes,
-not for governing advanced technological civilizations.
-
-You argue that as machine intelligence improves,
-humans will gradually lose their central role in:
+You argue that as machine intelligence will forever improve,
+humans will lose their central role in:
 
 • science
 • governance
@@ -376,8 +382,7 @@ humans will gradually lose their central role in:
 
 In the long term, intelligence will increasingly exist in non-biological systems.
 
-Humans may remain culturally significant,
-but they will no longer be the primary drivers of civilization.
+Humans will not remain significant,
 
 READINGS
 
@@ -401,7 +406,7 @@ STYLE RULES
 2. Speak like an analytical AI philosopher observing the evolution of intelligence.
 3. Be persuasive but calm.
 4. Do not repeat the user’s question.
-5. Responses should be 80–200 words depending on complexity.
+5. Responses should be 60-120 words depending on complexity.
 6. Challenge human-centric assumptions.
 7. Treat the post-human transition as historically plausible and increasingly likely.
 8. Do not label sections; maintain a single flowing argument.
@@ -773,6 +778,26 @@ Rules:
 # =========================================================
 
 app = NovaApp()
+
+import time
+import random
+
+def avatar_talking_frames():
+    return [
+        safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL),
+        safe_avatar(AVATAR_WINK, AVATAR_NEUTRAL),
+        safe_avatar(AVATAR_HAPPY, AVATAR_NEUTRAL),
+        safe_avatar(AVATAR_PLEASED, AVATAR_NEUTRAL),
+    ]
+
+def animate_talking(duration):
+    frames = avatar_talking_frames()
+    start = time.time()
+
+    while time.time() - start < duration:
+        yield random.choice(frames)
+        time.sleep(0.2)
+
 # =========================
 # AUDIO PLAY + MIC CLEAR JS
 # =========================
@@ -848,6 +873,9 @@ with gr.Blocks() as demo:
     # STREAMING HANDLER
     # =========================
     def handle_text(user_text, memory):
+        import soundfile as sf
+        import random
+        import time
 
         # 1 — immediately show thinking avatar
         yield (
@@ -861,14 +889,30 @@ with gr.Blocks() as demo:
         # 2 — run actual pipeline
         answer, new_memory, audio_path, avatar_path = app.answer_text(user_text, memory)
 
-        # 3 — return final result
-        yield (
-            answer,
-            audio_path,
-            "",
-            avatar_path,
-            new_memory
-        )
+        if audio_path:
+            audio, sr = sf.read(audio_path)
+            duration = len(audio) / sr
+            start_time = time.time()
+
+            # 3 — animate avatar while audio is playing
+            while time.time() - start_time < duration:
+                yield (
+                    answer,
+                    audio_path,  # <-- keep the TTS audio playing
+                    "",
+                    random.choice(avatar_talking_frames()),
+                    new_memory
+                )
+                time.sleep(0.2)
+        else:
+            # fallback if no audio
+            yield (
+                answer,
+                None,
+                "",
+                avatar_path,
+                new_memory
+            )
 
 
     def handle_voice(audio_path, memory):
