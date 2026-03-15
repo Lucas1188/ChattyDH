@@ -60,7 +60,7 @@ CHUNK_OVERLAP = 100
 TOP_K = 4
 MAX_TURNS_MEMORY = 3
 OLLAMA_MODEL = "ministral-3:8b"   # change if using another model
-OLLAMA_SM_MODEL = "inistral-3:3b"   # smaller model for validation step
+OLLAMA_SM_MODEL = "ministral-3:3b"   # smaller model for validation step
 
 # =========================================================
 # 2) DOCX LOADING
