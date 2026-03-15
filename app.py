@@ -578,7 +578,6 @@ def ollama_generate(question: str, hits: List[Dict], memory: List[Dict], elabora
     if elaborate:
         system_prompt = f"""
 {ELABORATE_SYSTEM_PROMPT}
-{context_block}
 """
     else:
         # Default concise system prompt
@@ -595,9 +594,11 @@ User question:
 
 {question}
 
+{context_block}
+
 Instructions:
 - Speak in your usual NOVA voice.
-- Integrate supporting points if available.
+- Integrate supporting points if available, NEVER list evidence/points as bullet points.
 """
 
     messages = [
