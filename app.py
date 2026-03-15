@@ -745,6 +745,11 @@ const clear = document.querySelector('[aria-label="Clear"]');
 if (clear) clear.click();
 }
 """
+def CHANGE_MODEL(modelA,modelB):
+    global OLLAMA_MODEL, OLLAMA_SM_MODEL
+    OLLAMA_MODEL = modelA
+    OLLAMA_SM_MODEL = modelB
+
 with gr.Blocks() as demo:
     memory_state = gr.State([])
 
