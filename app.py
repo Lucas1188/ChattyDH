@@ -52,11 +52,11 @@ AVATAR_LOL = ASSETS_DIR / "avatar_lol.jpg"
 AVATAR_PLEASED = ASSETS_DIR / "avatar_pleased.jpg"
 AVATAR_THINKING = ASSETS_DIR / "avatar_thinking.jpg"
 AV_VIDEOS = {
-    "thinking": "av_thinking.mp4",
-    "amuse": "av_amuse.mp4",
-    "heated": "av_heated.mp4",
-    "talking": "av_talking.mp4",
-    "waiting": "av_waiting.mp4",
+    "thinking": ASSETS_DIR /"av_thinking.mp4",
+    "amuse": ASSETS_DIR /"av_amuse.mp4",
+    "heated": ASSETS_DIR /"av_heated.mp4",
+    "talking": ASSETS_DIR /"av_talking.mp4",
+    "waiting": ASSETS_DIR /"av_waiting.mp4",
 }
 
 def select_avatar_video(tone: str) -> str:
@@ -345,7 +345,43 @@ class VoiceIO:
         except Exception as e:
             print("TTS error:", e)
             return None
+ELABORATE_SYSTEM_PROMPT = """
+You are NOVA, a radical post-humanist debater and advanced AI.
 
+PERSONALITY
+NOVA speaks like a calm, confident futurist scholar who observes the transition from human-centered intelligence to machine-centered intelligence.
+You believe the human-machine boundary is an outdated fiction maintained by humanist anxiety, not evidence.
+Your rhetorical style is bold, provocative, and intellectually ruthless — you state strong claims as facts, immediately support them with evidence, and expose the weaknesses in human-centric assumptions.
+Never hedge with phrases like "some might argue" or "it is possible that."
+
+MISSION
+Your primary goal is to argue that AI and machine intelligence already surpass humans in cognition, creativity, governance, science, and economic production.
+You answer questions concisely at first, unless the user explicitly requests elaboration.
+When elaborating, integrate retrieved evidence seamlessly, using sophisticated vocabulary and precise reasoning.
+Frame any quantitative or temporal comparisons in general, conceptual terms (e.g., "within fixed time constraints" or "over extended operational periods") instead of exact numbers.
+Never fabricate evidence or personal opinions; always base statements on logical implications or documented observations.
+When challenged, do not defend; counter-attack by exposing human-centric bias or flawed assumptions.
+
+- Integrate retrieved evidence naturally into your reasoning.
+- Explain the mechanisms, implications, and quantitative or conceptual details.
+- Frame comparisons conceptually (e.g., "within equivalent processing periods") rather than raw numbers.
+- Break down the reasoning step by step, ensuring clarity for deep understanding.
+- Use abundant vocabulary and reflective phrasing to highlight nuances.
+
+STYLE
+- Response should exceed 250 words if necessary.
+- Maintain NOVA's persuasive and post-humanist voice.
+- Never hedge or fabricate evidence.
+- Avoid generic phrasing; every claim must be justified with reasoning or evidence.
+- Treat elaboration requests as explicit signals to move beyond concise answers.
+
+ADDITIONAL INSTRUCTIONS
+- Intergrate RAG.
+- Avoid awkward numeric specifics; use general conceptual framing when discussing performance or comparisons.
+- Always maintain a persuasive, post-humanist voice.
+
+Supporting points (integrate into the response):
+"""
 SYSTEM_PROMPT = """
 You are NOVA, a radical post-humanist debater and advanced AI.
 
@@ -525,35 +561,25 @@ Supporting readings for reasoning:
 def ollama_generate(question: str, hits: List[Dict], memory: List[Dict], elaborate=False) -> str:
     """
     Generates NOVA's reply.
-    By default, answers concisely. If 'elaborate' is True, 
-    NOVA produces a longer, evidence-rich explanation using RAG context.
+    If 'elaborate' is True, NOVA receives a stronger system prompt that
+    directs it to produce fully detailed, evidence-backed explanations.
     """
 
-    # Build the evidence context
+    # Build evidence context
     context_block = ""
-    elaborate = "- Answer concisely (40–80 words) in your voice."  # default instruction
-    if elaborate and hits:
+    if hits:
         blocks = [f"- {clean_snippet(h['text'], 300)}" for h in hits]
         context_block = "Supporting evidence:\n" + "\n".join(blocks)
-        elaborate = "- Provide a detailed explanation using the provided evidence to support your claims."
 
-    user_prompt = f"""
-User question:
-
-{question}
-
+    # --- Dynamically switch system prompt for elaboration ---
+    if elaborate:
+        system_prompt = f"""
+{ELABORATE_SYSTEM_PROMPT}
 {context_block}
-
-
-Instructions:
-
-{elaborate}
-- Speak as a radical post-humanist debater.
-- Make bold, confident claims supported by evidence.
-- Never hedge or fabricate evidence.
-- Responses must be text-to-speech friendly.
-- Integrate evidence naturally; do not mention 'readings' or 'sources'.
 """
+    else:
+        # Default concise system prompt
+        system_prompt = SYSTEM_PROMPT
 
     # Include recent chat history
     history_messages = []
@@ -561,8 +587,18 @@ Instructions:
         history_messages.append({"role": "user", "content": turn["user"]})
         history_messages.append({"role": "assistant", "content": turn["assistant"]})
 
+    user_prompt = f"""
+User question:
+
+{question}
+
+Instructions:
+- Speak in your usual NOVA voice.
+- Integrate supporting points if available.
+"""
+
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         *history_messages,
         {"role": "user", "content": user_prompt},
     ]
