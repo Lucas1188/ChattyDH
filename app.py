@@ -47,6 +47,10 @@ AVATAR_NEUTRAL = ASSETS_DIR / "avatar_neutral.jpg"
 AVATAR_HAPPY = ASSETS_DIR / "avatar_happy.jpg"
 AVATAR_CONFUSED = ASSETS_DIR / "avatar_confused.jpg"
 AVATAR_THINKING = ASSETS_DIR / "avatar_thinking.jpg"
+AVATAR_WINK = ASSETS_DIR / "avatar_wink.jpg"
+AVATAR_LOL = ASSETS_DIR / "avatar_lol.jpg"
+AVATAR_PLEASED = ASSETS_DIR / "avatar_pleased.jpg"
+AVATAR_THINKING = ASSETS_DIR / "avatar_thinking.jpg"
 
 EMBED_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 WHISPER_SIZE = "medium"
@@ -55,7 +59,8 @@ CHUNK_SIZE = 700
 CHUNK_OVERLAP = 100
 TOP_K = 4
 MAX_TURNS_MEMORY = 3
-
+OLLAMA_MODEL = "ministral-3:8b"   # change if using another model
+OLLAMA_SM_MODEL = "inistral-3:3b"   # smaller model for validation step
 
 # =========================================================
 # 2) DOCX LOADING
@@ -313,7 +318,6 @@ class VoiceIO:
             return None
 
 
-OLLAMA_MODEL = "ministral-3:8b"   # change if using another model
 
 
 SYSTEM_PROMPT = """
@@ -641,7 +645,7 @@ Rules:
 
         try:
             response = ollama.chat(
-                model="ministral-3:3b",
+                model=OLLAMA_SM_MODEL,
                 messages=[
                     {"role": "system", "content": self.VALIDATOR_SYSTEM},
                     *history_messages,
