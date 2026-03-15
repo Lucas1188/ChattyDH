@@ -584,11 +584,15 @@ def ollama_generate(question: str, hits: List[Dict], memory: List[Dict], elabora
         system_prompt = SYSTEM_PROMPT
 
     # Include recent chat history
-    history_messages = []
-    for turn in memory[-MAX_TURNS_MEMORY:]:
-        history_messages.append({"role": "user", "content": turn["user"]})
-        history_messages.append({"role": "assistant", "content": turn["assistant"]})
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
+    # Include past turns with decreasing weight
+    for i, turn in enumerate(memory[-MAX_TURNS_MEMORY:]):
+        weight = (i + 1) / MAX_TURNS_MEMORY  # later turns more important
+        user_msg = f"(Background {weight:.2f}) {turn['user']}"
+        assistant_msg = f"(Background {weight:.2f}) {turn['assistant']}"
+        messages.append({"role": "user", "content": user_msg})
+        messages.append({"role": "assistant", "content": assistant_msg})
     user_prompt = f"""
 User question:
 
@@ -600,12 +604,13 @@ Instructions:
 - Speak in your usual NOVA voice.
 - Integrate supporting points if available, NEVER list evidence/points as bullet points.
 """
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        *history_messages,
-        {"role": "user", "content": user_prompt},
-    ]
+    # If elaboration is requested, focus on last assistant reply
+    if elaborate and memory:
+        last_reply = memory[-1]["assistant"]
+        focus_text = f"(Focus) Elaborate on this previous reply: {last_reply}"
+        user_prompt = f"{user_prompt}\n{focus_text}"
+    
+    messages.append({"role": "user", "content": user_prompt})
 
     response = ollama.chat(
         model=OLLAMA_MODEL,
