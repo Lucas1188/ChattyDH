@@ -787,7 +787,7 @@ Rules:
         ]
         if any(t in query.lower() for t in triggers):
             elaborate = True
-
+        print(f"Validator: elaborate={elaborate} based on triggers in query.")
         # Only run validator LLM if few/no hits (short answer required)
         if hits and len(hits) > 1:
             return None, elaborate
@@ -839,7 +839,7 @@ Rules:
         user_text = (user_text or "").strip()
         if not user_text:
             return "Please type a question.", memory, None, safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
-
+        print(f"User query: {user_text}")
         # Retrieval
         hits = self.retriever.search(user_text, k=TOP_K)
         hits = [h for h in hits if h["score"] >= self.MIN_SIM]
@@ -853,11 +853,11 @@ Rules:
             print("===================")
         # Gatekeeper decides if short reply or full answer + elaboration
         refusal, elaborate = self.ollama_validate(user_text, hits, memory)
-
+        print(f"Gatekeeper refusal: {refusal==None}, elaborate: {elaborate}")
         # If refusal and not elaboration request, return short reply
         if refusal and not elaborate:
             return refusal, memory, self.voice.text_to_speech(refusal), safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
-
+        print("Generating full NOVA answer...")
         # Otherwise generate full NOVA reply (elaborate if requested)
         answer = ollama_generate(user_text, hits, memory, elaborate=elaborate)
 
