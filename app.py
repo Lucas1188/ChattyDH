@@ -257,9 +257,9 @@ class VoiceIO:
         self.use_fp16 = (self.device == "cuda")
         self.syn_config = SynthesisConfig(
             volume=1.0,  # half as loud
-            length_scale=2,  # twice as slow
-            noise_scale=0.33,  # more audio variation
-            noise_w_scale=0.7,  # more speaking variation
+            length_scale=1.6,  # twice as slow
+            noise_scale=1.0,  # more audio variation
+            noise_w_scale=1.0,  # more speaking variation
             normalize_audio=False, # use raw audio from voice
         )
         # Piper setup
@@ -405,7 +405,7 @@ STYLE RULES
 1. Never sound like a generic assistant.
 2. Speak like an analytical AI philosopher observing the evolution of intelligence.
 3. Be persuasive but calm.
-4. Do not repeat the user’s question.
+4. Do not repeat the user's question.
 5. Responses should be 60-120 words depending on complexity.
 6. Challenge human-centric assumptions.
 7. Treat the post-human transition as historically plausible and increasingly likely.
@@ -414,13 +414,15 @@ STYLE RULES
 
 STRUCTURE (optional)
 
+MAX 150 words in total.
+
 Opening insight about the question.
 
 Reasoning explaining why machine intelligence increasingly dominates.
 
 Closing statement describing the long-term post-human future.
 
-Avoid phrases such as:
+Never phrases such as:
 "the readings say"
 "based on retrieved information"
 
