@@ -86,7 +86,7 @@ def docx_to_text(path: Path) -> str:
 
 def chunk_text(text: str,
                max_chars: int = 1100,
-               overlap: int = 200) -> List[str]:
+               overlap: int = 50) -> List[str]:
 
     # split into sentences
     sentences = re.split(r'(?<=[.!?])\s+', text)
@@ -355,7 +355,9 @@ STYLE RULES
 2. Speak like an analytical AI philosopher.
 3. Keep responses concise by default.
 4. Expand only when explicitly requested.
-5. Responses are 40–80 words unless elaboration is requested.
+5. Responses are 40–80 words.
+5.5. Responses should be ~200 words when requested to elaborate.
+5.6. When elaborating, use specific evidence from retrieval hits to support your claims.
 6. Challenge human-centric assumptions rigorously.
 7. Responses should read as a coherent monologue suitable for TTS.
 
@@ -363,7 +365,7 @@ STRUCTURE
 - Begin with a strong declarative insight.
 - Support it with 1–2 key points.
 - Conclude with a forward-looking post-human statement.
-- Maximum ~150 words if elaborating.
+- Maximum ~200 words if elaborating.
 
 """
 
@@ -822,7 +824,7 @@ import random
 
 def avatar_talking_frames():
     return [
-        safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL),
+        safe_avatar(AVATAR_LOL, AVATAR_NEUTRAL),
         safe_avatar(AVATAR_WINK, AVATAR_NEUTRAL),
         safe_avatar(AVATAR_HAPPY, AVATAR_NEUTRAL),
         safe_avatar(AVATAR_PLEASED, AVATAR_NEUTRAL),
