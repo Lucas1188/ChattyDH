@@ -477,6 +477,7 @@ Your reasoning process should:
 Do not quote the readings directly.
 Do not mention that they are readings.
 Your answer must be in speech form, text to speech friendly.
+Never use the phrase "the readings"
 """
 
     history_messages = []
