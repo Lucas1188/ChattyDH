@@ -708,10 +708,28 @@ Rules:
     
     from typing import List, Dict
     
-    def ollama_validate(self, query: str, hits: List[Dict], memory: List[Dict]) -> str:
+    def ollama_validate(self, query: str, hits: List[Dict], memory: List[Dict]) -> Tuple[Optional[str], bool]:
+        """
+        Returns:
+            refusal_text: a short NOVA reply if the message is not fully answerable
+            elaborate: True if the user seems to request more detail
+        """
+        # Default: no refusal, no elaboration
+        refusal_text = None
+        elaborate = False
 
+        # Detect explicit elaboration requests
+        triggers = [
+            "why", "how", "explain", "elaborate", "detail", "expand",
+            "more information", "justify", "please clarify", "deepen",
+            "tell me more", "reasoning", "argument", "example", "thesis"
+        ]
+        if any(t in query.lower() for t in triggers):
+            elaborate = True
+
+        # Only run validator LLM if few/no hits (short answer required)
         if hits and len(hits) > 1:
-            return None
+            return None, elaborate
 
         evidence = extract_evidence_sentences(query, hits, self.retriever.embedder)
         context_block = "\n".join(f"- {s}" for s in evidence) if evidence else "(no relevant evidence found)"
@@ -730,28 +748,22 @@ Rules:
 
     Decide whether this requires a full answer or a short conversational reply.
     """
-
         try:
             response = ollama.chat(
                 model=OLLAMA_SM_MODEL,
-                messages=[
-                    {"role": "system", "content": self.VALIDATOR_SYSTEM},
-                    *history_messages,
-                    {"role": "user", "content": prompt}
-                ],
+                messages=[{"role": "system", "content": self.VALIDATOR_SYSTEM}, *history_messages, {"role": "user", "content": prompt}],
                 options={"temperature": 0.2, "num_predict": 60}
             )
-
             ans_text = response["message"]["content"].strip()
-
             if "ANSWERABLE" in ans_text.upper():
-                return None
+                return None, elaborate
             else:
-                return ans_text
+                refusal_text = ans_text
+                return refusal_text, elaborate
 
         except Exception as e:
             print(f"Ollama validator error: {e}")
-            return "I may not have understood that clearly. Could you rephrase it?"
+            return "I may not have understood that clearly. Could you rephrase it?", elaborate
 
     def evidence_matches(self, question: str, evidence: List[str]):
         import re
@@ -767,39 +779,21 @@ Rules:
         if not user_text:
             return "Please type a question.", memory, None, safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
 
-        # Detection of elaboration triggers
-        elaboration_triggers = [
-            "why", "how", "explain", "elaborate", "detail", "expand", "more information",
-            "justify", "please clarify", "deepen", "tell me more", "reasoning", "argument", "example"
-        ]
-        # Check if any trigger appears in the user text
-        elaborate = any(trigger in user_text.lower() for trigger in elaboration_triggers)
-
         # Retrieval
         hits = self.retriever.search(user_text, k=TOP_K)
         hits = [h for h in hits if h["score"] >= self.MIN_SIM]
 
-        print("\n=== RAG DEBUG ===")
-        print("Query:", user_text)
-        for i, h in enumerate(hits):
-            print(f"\nHit {i+1} | score={h['score']:.3f} | source={h['source']}")
-            print(clean_snippet(h["text"], 200))
-        print("=================\n")
+        # Gatekeeper decides if short reply or full answer + elaboration
+        refusal, elaborate = self.ollama_validate(user_text, hits, memory)
 
-        # Validate if we need to reply briefly
-        refusal = self.ollama_validate(user_text, hits, memory)
+        # If refusal and not elaboration request, return short reply
         if refusal and not elaborate:
-            # If a short conversational reply is suggested and no elaboration requested
             return refusal, memory, self.voice.text_to_speech(refusal), safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
 
-        # Generate NOVA's reply
-        print("Generating NOVA answer (elaborate={}):".format(elaborate))
+        # Otherwise generate full NOVA reply (elaborate if requested)
         answer = ollama_generate(user_text, hits, memory, elaborate=elaborate)
 
-        # Update memory
         new_memory = memory + [{"user": user_text, "assistant": answer}]
-
-        # Generate TTS audio
         audio_path = self.voice.text_to_speech(answer)
         avatar_path = choose_avatar(user_text, answer)
 
