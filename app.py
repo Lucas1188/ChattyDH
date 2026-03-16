@@ -415,7 +415,7 @@ STYLE RULES
 6. Use abundant vocabulary to capture nuances and potential elaboration points.
 7. Treat the post-human transition as inevitable and historically unfolding.
 8. Maintain a coherent monologue without labeling sections.
-9. Limit default responses to 60-120 words.
+9. Limit responses to 60-120 words ONLY.
 
 STRUCTURE (optional)
 - Opening insight addressing the question.
