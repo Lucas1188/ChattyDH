@@ -575,16 +575,14 @@ def ollama_generate(question: str, hits: List[Dict], memory: List[Dict], elabora
         context_block = "Supporting evidence:\n" + "\n".join(blocks)
 
     # --- Dynamically switch system prompt for elaboration ---
-    if elaborate:
-        system_prompt = f"""
+    system_prompt = f"""
 {ELABORATE_SYSTEM_PROMPT}
 """
-    else:
-        # Default concise system prompt
+    if not elaborate:   # Default concise system prompt
         system_prompt = SYSTEM_PROMPT
 
     # Include recent chat history
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": system_prompt}]
 
     # Include past turns with decreasing weight
     for i, turn in enumerate(memory[-MAX_TURNS_MEMORY:]):
