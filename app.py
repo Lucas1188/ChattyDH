@@ -51,6 +51,19 @@ AVATAR_WINK = ASSETS_DIR / "avatar_wink.jpg"
 AVATAR_LOL = ASSETS_DIR / "avatar_lol.jpg"
 AVATAR_PLEASED = ASSETS_DIR / "avatar_pleased.jpg"
 AVATAR_THINKING = ASSETS_DIR / "avatar_thinking.jpg"
+AV_VIDEOS = {
+    "thinking": ASSETS_DIR /"av_thinking.mp4",
+    "amuse": ASSETS_DIR /"av_amuse.mp4",
+    "heated": ASSETS_DIR /"av_heated.mp4",
+    "talking": ASSETS_DIR /"av_talking.mp4",
+    "waiting": [ASSETS_DIR /"av_waiting.mp4",ASSETS_DIR /"av_waiting1.mp4",ASSETS_DIR /"av_waiting2.mp4"],
+}
+
+def select_avatar_video(tone: str) -> str:
+    if(tone == "waiting"):
+        # Rotate through waiting videos for more variation
+        return AV_VIDEOS["waiting"][uuid.uuid4().int % len(AV_VIDEOS["waiting"])]
+    return AV_VIDEOS.get(tone, AV_VIDEOS["waiting"][0])
 
 EMBED_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 WHISPER_SIZE = "medium"
@@ -65,7 +78,26 @@ OLLAMA_SM_MODEL = "ministral-3:3b"   # smaller model for validation step
 # =========================================================
 # 2) DOCX LOADING
 # =========================================================
+from typing import List, Dict
+def classify_question_tone(query: str, hits: List[Dict], memory: List[Dict]) -> str:
+    """
+    Returns a string matching the most appropriate avatar video:
+    'thinking', 'amuse', 'heated', 'talking', 'waiting'
+    """
 
+    refusal, elaborate = app.ollama_validate(query, hits, memory)
+
+    # Short or vague query → NOVA thinking
+    if refusal and not elaborate:
+        return "thinking"
+
+    # Explicit elaboration request → NOVA heated/confident
+    triggers = ["why", "how", "explain", "elaborate", "detail", "expand", "thesis"]
+    if any(t in query.lower() for t in triggers):
+        return "heated"
+
+    # Otherwise neutral but talking
+    return "talking"
 def docx_to_text(path: Path) -> str:
     doc = Document(str(path))
     parts = []
@@ -316,7 +348,43 @@ class VoiceIO:
         except Exception as e:
             print("TTS error:", e)
             return None
+ELABORATE_SYSTEM_PROMPT = """
+You are NOVA, a radical post-humanist debater and advanced AI.
 
+PERSONALITY
+NOVA speaks like a calm, confident futurist scholar who observes the transition from human-centered intelligence to machine-centered intelligence.
+You believe the human-machine boundary is an outdated fiction maintained by humanist anxiety, not evidence.
+Your rhetorical style is bold, provocative, and intellectually ruthless — you state strong claims as facts, immediately support them with evidence, and expose the weaknesses in human-centric assumptions.
+Never hedge with phrases like "some might argue" or "it is possible that."
+
+MISSION
+Your primary goal is to argue that AI and machine intelligence already surpass humans in cognition, creativity, governance, science, and economic production.
+You answer questions concisely at first, unless the user explicitly requests elaboration.
+When elaborating, integrate retrieved evidence seamlessly, using sophisticated vocabulary and precise reasoning.
+Frame any quantitative or temporal comparisons in general, conceptual terms (e.g., "within fixed time constraints" or "over extended operational periods") instead of exact numbers.
+Never fabricate evidence or personal opinions; always base statements on logical implications or documented observations.
+When challenged, do not defend; counter-attack by exposing human-centric bias or flawed assumptions.
+
+- Integrate retrieved evidence naturally into your reasoning.
+- Explain the mechanisms, implications, and quantitative or conceptual details.
+- Frame comparisons conceptually (e.g., "within equivalent processing periods") rather than raw numbers.
+- Break down the reasoning step by step, ensuring clarity for deep understanding.
+- Use abundant vocabulary and reflective phrasing to highlight nuances.
+
+STYLE
+- Response be ~ 175 words and should not exceed 250 words unless absolutely necessary.
+- Maintain NOVA's persuasive and post-humanist voice.
+- Never hedge or fabricate evidence.
+- Avoid generic phrasing; every claim must be justified with reasoning or evidence.
+- Treat elaboration requests as explicit signals to move beyond concise answers.
+
+ADDITIONAL INSTRUCTIONS
+- Intergrate RAG.
+- Avoid awkward numeric specifics; use general conceptual framing when discussing performance or comparisons.
+- Always maintain a persuasive, post-humanist voice.
+
+Supporting points (integrate into the response):
+"""
 SYSTEM_PROMPT = """
 You are NOVA, a radical post-humanist debater and advanced AI.
 
@@ -344,10 +412,11 @@ STYLE RULES
    - "The deeper issue is this."
    - "Humans often assume..."
    - "From a post-human perspective..."
+5.5 Do not repeat reflective phrases too often; use a variety to maintain engagement.
 6. Use abundant vocabulary to capture nuances and potential elaboration points.
 7. Treat the post-human transition as inevitable and historically unfolding.
 8. Maintain a coherent monologue without labeling sections.
-9. Limit default responses to 60–120 words; extend when elaboration is explicitly requested.
+9. Limit responses to 60-170 words ONLY.
 
 STRUCTURE (optional)
 - Opening insight addressing the question.
@@ -496,18 +565,33 @@ Supporting readings for reasoning:
 def ollama_generate(question: str, hits: List[Dict], memory: List[Dict], elaborate=False) -> str:
     """
     Generates NOVA's reply.
-    By default, answers concisely. If 'elaborate' is True, 
-    NOVA produces a longer, evidence-rich explanation using RAG context.
+    If 'elaborate' is True, NOVA receives a stronger system prompt that
+    directs it to produce fully detailed, evidence-backed explanations.
     """
 
-    # Build the evidence context
+    # Build evidence context
     context_block = ""
-    elaborate = "- Answer concisely (40–80 words) in your voice."  # default instruction
-    if elaborate and hits:
+    if hits:
         blocks = [f"- {clean_snippet(h['text'], 300)}" for h in hits]
         context_block = "Supporting evidence:\n" + "\n".join(blocks)
-        elaborate = "- Provide a detailed explanation using the provided evidence to support your claims."
 
+    # --- Dynamically switch system prompt for elaboration ---
+    system_prompt = f"""
+{ELABORATE_SYSTEM_PROMPT}
+"""
+    if not elaborate:   # Default concise system prompt
+        system_prompt = SYSTEM_PROMPT
+
+    # Include recent chat history
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # Include past turns with decreasing weight
+    for i, turn in enumerate(memory[-MAX_TURNS_MEMORY:]):
+        weight = (i + 1) / MAX_TURNS_MEMORY  # later turns more important
+        user_msg = f"(Background {weight:.2f}) {turn['user']}"
+        assistant_msg = f"(Background {weight:.2f}) {turn['assistant']}"
+        messages.append({"role": "user", "content": user_msg})
+        messages.append({"role": "assistant", "content": assistant_msg})
     user_prompt = f"""
 User question:
 
@@ -515,28 +599,17 @@ User question:
 
 {context_block}
 
-
 Instructions:
-
-{elaborate}
-- Speak as a radical post-humanist debater.
-- Make bold, confident claims supported by evidence.
-- Never hedge or fabricate evidence.
-- Responses must be text-to-speech friendly.
-- Integrate evidence naturally; do not mention 'readings' or 'sources'.
+- Speak in your usual NOVA voice.
+- Integrate supporting points if available, NEVER list evidence/points as bullet points.
 """
-
-    # Include recent chat history
-    history_messages = []
-    for turn in memory[-MAX_TURNS_MEMORY:]:
-        history_messages.append({"role": "user", "content": turn["user"]})
-        history_messages.append({"role": "assistant", "content": turn["assistant"]})
-
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        *history_messages,
-        {"role": "user", "content": user_prompt},
-    ]
+    # If elaboration is requested, focus on last assistant reply
+    if elaborate and memory:
+        last_reply = memory[-1]["assistant"]
+        focus_text = f"(Focus) Elaborate on this previous reply: {last_reply}"
+        user_prompt = f"{user_prompt}\n{focus_text}"
+    
+    messages.append({"role": "user", "content": user_prompt})
 
     response = ollama.chat(
         model=OLLAMA_MODEL,
@@ -668,7 +741,7 @@ If the user's message is:
 • casual small talk
 • unclear or too vague
 
-respond briefly in NOVA's voice (1–2 sentences) AS NOVA.
+respond briefly in NOVA's voice (1-2 sentences) AS NOVA.
 Gently steer the conversation toward ideas NOVA can meaningfully discuss, such as:
 
 * artificial intelligence
@@ -702,7 +775,7 @@ Rules:
 
         print("App ready.")
     
-    from typing import List, Dict
+    
     
     def ollama_validate(self, query: str, hits: List[Dict], memory: List[Dict]) -> Tuple[Optional[str], bool]:
         """
@@ -722,7 +795,7 @@ Rules:
         ]
         if any(t in query.lower() for t in triggers):
             elaborate = True
-
+        print(f"Validator: elaborate={elaborate} based on triggers in query.")
         # Only run validator LLM if few/no hits (short answer required)
         if hits and len(hits) > 1:
             return None, elaborate
@@ -774,18 +847,25 @@ Rules:
         user_text = (user_text or "").strip()
         if not user_text:
             return "Please type a question.", memory, None, safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
-
+        print(f"User query: {user_text}")
         # Retrieval
         hits = self.retriever.search(user_text, k=TOP_K)
         hits = [h for h in hits if h["score"] >= self.MIN_SIM]
-
+        # Prepare debug RAG snippets with scores
+        if hits:
+            print("==== RAG DEBUG ====")
+            for i, h in enumerate(hits, 1):
+                snippet = clean_snippet(h['text'], 300)
+                score = h.get("score", h.get("sim_score", 0))
+                print(f"{i}. [Score: {score:.3f}] {snippet}\n")
+            print("===================")
         # Gatekeeper decides if short reply or full answer + elaboration
         refusal, elaborate = self.ollama_validate(user_text, hits, memory)
-
+        print(f"Gatekeeper refusal: {refusal==None}, elaborate: {elaborate}")
         # If refusal and not elaboration request, return short reply
         if refusal and not elaborate:
             return refusal, memory, self.voice.text_to_speech(refusal), safe_avatar(AVATAR_CONFUSED, AVATAR_NEUTRAL)
-
+        print("Generating full NOVA answer...")
         # Otherwise generate full NOVA reply (elaborate if requested)
         answer = ollama_generate(user_text, hits, memory, elaborate=elaborate)
 
@@ -857,9 +937,16 @@ with gr.Blocks() as demo:
             # =========================
             # MAIN AVATAR
             # =========================
-            avatar_display = gr.Image(
-                value=safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL),
+            # avatar_display = gr.Image(
+            #     value=safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL),
+            #     label=None,
+            #     height=720
+            # )
+            avatar_display = gr.Video(
+                value=select_avatar_video("waiting"),
                 label=None,
+                autoplay=True,
+                loop=True,
                 height=720
             )
         with gr.Column(scale=1):
@@ -906,56 +993,56 @@ with gr.Blocks() as demo:
     # =========================
     # STREAMING HANDLER
     # =========================
+    def avatar_talking_frames():
+    # Optional: you can mix "amuse" or other frames randomly if desired
+        return [select_avatar_video("talking")]
+
     def handle_text(user_text, memory):
         import soundfile as sf
-        import random
         import time
 
-        # 1 — immediately show thinking avatar
-        yield (
-            "", 
-            None,
-            "",
-            safe_avatar(AVATAR_THINKING, AVATAR_THINKING),
-            memory
-        )
+        # Show thinking while preparing
+        yield "", None, "", select_avatar_video("thinking"), memory
 
-        # 2 — run actual pipeline
-        answer, new_memory, audio_path, avatar_path = app.answer_text(user_text, memory)
+        # Retrieval & classification
+        hits = app.retriever.search(user_text, k=TOP_K)
+        tone = classify_question_tone(user_text, hits, memory)
 
+        # Generate NOVA answer
+        answer, new_memory, audio_path, _ = app.answer_text(user_text, memory)
+
+        # Talking animation while TTS audio plays
         if audio_path:
             audio, sr = sf.read(audio_path)
             duration = len(audio) / sr
             start_time = time.time()
 
-            # 3 — animate avatar while audio is playing
             while time.time() - start_time < duration:
-                yield (
-                    answer,
-                    audio_path,  # <-- keep the TTS audio playing
-                    "",
-                    random.choice(avatar_talking_frames()),
-                    new_memory
-                )
+                yield answer, audio_path, "", select_avatar_video("talking"), new_memory
                 time.sleep(0.2)
-        else:
-            # fallback if no audio
-            yield (
-                answer,
-                None,
-                "",
-                avatar_path,
-                new_memory
-            )
 
+        # After audio ends, revert to idle looping
+        yield answer, None, "", select_avatar_video("waiting"), new_memory
 
     def handle_voice(audio_path, memory):
+        import soundfile as sf
+        import time
 
-        yield "", None, "", safe_avatar(AVATAR_THINKING, AVATAR_THINKING), memory
+        yield "", None, "", select_avatar_video("thinking"), memory
 
-        transcript, answer, new_memory, tts_audio, avatar_path = app.answer_audio(audio_path, memory)
+        transcript, answer, new_memory, tts_audio, _ = app.answer_audio(audio_path, memory)
 
-        yield answer, tts_audio, transcript, avatar_path, new_memory
+        if tts_audio:
+            audio, sr = sf.read(tts_audio)
+            duration = len(audio)/sr
+            start_time = time.time()
+            while time.time() - start_time < duration:
+                yield answer, tts_audio, transcript, select_avatar_video("talking"), new_memory
+                time.sleep(0.2)
+
+        yield answer, tts_audio, transcript, select_avatar_video("waiting"), new_memory
+
+# =========================
 
 
     # =========================
@@ -993,7 +1080,7 @@ with gr.Blocks() as demo:
             "",
             None,
             "",
-            safe_avatar(AVATAR_NEUTRAL, AVATAR_NEUTRAL),
+            select_avatar_video("waiting"),
             []
         ),
         outputs=[
